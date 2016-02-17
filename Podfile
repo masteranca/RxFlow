@@ -1,19 +1,16 @@
+source 'https://github.com/CocoaPods/Specs.git'
 platform :ios, '9.0'
 use_frameworks!
 inhibit_all_warnings!
 
-def import_common_pods
-    pod 'SwiftyJSON', '~> 2.3'
-    pod 'RxSwift',    '~> 2.0'
-    pod 'RxCocoa',    '~> 2.0'
-end
-
-
 target 'RxFlow' do
-   import_common_pods
-end
 
-target 'RxFlowTests' do
-   import_common_pods
-end
+    pod 'SwiftyJSON'
+    pod 'RxSwift'
+    pod 'RxCocoa'
 
+  target 'RxFlowTests' do
+      inherit! :search_paths
+  end
+
+end
