@@ -6,6 +6,7 @@
 
 import Foundation
 import SwiftyJSON
+import RxSwift
 
 
 // Default UTF8StringParser
@@ -148,6 +149,79 @@ public final class Target {
         return request
     }
 
+    private func requestForMethod(method: HTTPMethod) -> NSURLRequest {
+
+        let urlComponent = NSURLComponents(string: url)!
+        urlComponent.queryItems = parameters
+        
+        let request = NSMutableURLRequest(URL: urlComponent.URL!)
+        request.allHTTPHeaderFields = headers
+        request.HTTPMethod = method.rawValue
+        request.HTTPBody = body
+        
+        return request
+    }
+    
+    public func rx_get() -> Observable<JSON> {
+        return rx_get { data in
+            return JSON(data: data)
+        }
+    }
+    
+    public func rx_get<T>(parser:(NSData) throws -> T) -> Observable<T> {
+        return rx_parse(requestForMethod(.GET), parser: parser)
+    }
+
+    
+    // MARK: RX
+    
+    private func rx_parse<T>(request: NSURLRequest, parser:(NSData) throws -> T) -> Observable<T> {
+        
+        return rx_request(request).map { data, response in
+            do {
+                return try parser(data)
+            } catch let error {
+                throw FlowError.ParseError(error)
+            }
+        }
+    }
+    
+    private func rx_request(request: NSURLRequest) -> Observable<(NSData, NSHTTPURLResponse)> {
+        
+        return Observable.create { observer in
+            
+            let task = self.session.dataTaskWithRequest(request) { data, response, error in
+                
+                // Communication Error
+                guard let response = response, data = data else {
+                    observer.onError(FlowError.CommunicationError(error))
+                    return
+                }
+                
+                // Non Http Response Error
+                guard let http = response as? NSHTTPURLResponse else {
+                    observer.onError(FlowError.NonHttpResponse(response))
+                    return
+                }
+                
+                // Unsupported Status Code Error
+                guard http.isSuccessResponse() else {
+                    observer.onError(FlowError.UnsupportedStatusCode(http))
+                    return
+                }
+                
+                observer.onNext(data, http)
+                observer.onCompleted()
+            }
+            
+            task.resume()
+            
+            return AnonymousDisposable {
+                task.cancel()
+            }
+        }
+    }
+    
     private func request<T>(request: NSURLRequest, parser: (NSData?) -> (T?), callback: (Result<T>?) -> ()) -> Request {
 
         let sessionTask = session.dataTaskWithRequest(request) {
@@ -164,7 +238,7 @@ public final class Target {
                         }
                     }
                 } else {
-                    callback(.Failure(self.errorFromResponse(response)))
+                    callback(.Failure(errorFromResponse(response)))
                 }
             }
         }
@@ -173,22 +247,22 @@ public final class Target {
 
         return Request(task: sessionTask)
     }
+}
 
-    private func errorFromResponse(response: NSURLResponse?) -> FlowError {
-
-        if let response = response {
-            if let httpResponse = response as? NSHTTPURLResponse {
-                switch (httpResponse.statusCode / 100) {
-                    case 1, 3: return .UnsupportedStatusCode(httpResponse)
-                    case 4: return .ClientError(httpResponse)
-                    case 5: return .ServerError(httpResponse)
-                    default: return .UnknownError
-                }
+private func errorFromResponse(response: NSURLResponse?) -> FlowError {
+    
+    if let response = response {
+        if let httpResponse = response as? NSHTTPURLResponse {
+            switch (httpResponse.statusCode / 100) {
+            case 1, 3: return .UnsupportedStatusCode(httpResponse)
+            case 4: return .ClientError(httpResponse)
+            case 5: return .ServerError(httpResponse)
+            default: return .UnknownError
             }
-            return .UnsupportedResponse(response)
-        } else {
-            return .UnknownError
         }
+        return .UnsupportedResponse(response)
+    } else {
+        return .UnknownError
     }
 }
 

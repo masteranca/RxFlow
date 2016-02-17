@@ -53,7 +53,8 @@ public enum FlowError: ErrorType {
     case ServerError(NSHTTPURLResponse)
     case UnsupportedStatusCode(NSHTTPURLResponse)
     case UnknownError
-
+    case ParseError(ErrorType)
+    case NonHttpResponse(NSURLResponse)
 }
 
 
