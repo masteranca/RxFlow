@@ -9,51 +9,34 @@ import SwiftyJSON
 import RxSwift
 
 
-// Default UTF8StringParser
-public let UTF8StringParser: (NSData?) -> (String?) = {
-    data in if let data = data {
-        return NSString.init(data: data, encoding: NSUTF8StringEncoding) as String!
-    } else {
-        return nil
+//// Default UTF8StringParser
+public let UTF8StringParser: (NSData) throws -> (String) = {
+    data in
+
+    guard let result = String(data: data, encoding: NSUTF8StringEncoding) else {
+        throw FlowError.ParseError(nil)
     }
+    return result
 }
 
-// Standard JSONParser
-public let JSONParser: (NSData?) -> (AnyObject?) = {
-    data in if let data = data {
-        do {
-            return try NSJSONSerialization.JSONObjectWithData(data, options: NSJSONReadingOptions(rawValue: 0))
-        } catch {
-            return nil
-        }
-    } else {
-        return nil
-    }
-}
-
-// SwiftyJSON parser
-public let SwiftyJSONParser: (NSData?) -> (JSON?) = {
-    data in if let data = data {
-        return JSON(data: data)
-    } else {
-        return nil
-    }
+//// SwiftyJSON parser
+public let SwiftyJSONParser: (NSData) -> (JSON) = {
+    data in return JSON(data: data)
 }
 
 //MARK: HTTP Methods
-
 private enum HTTPMethod: String {
     case GET, PUT, POST, DELETE
 }
 
 public final class Target {
 
+    public typealias Headers = [String:String]
+
     private let url: String
     private lazy var parameters: Array<NSURLQueryItem> = []
     private lazy var headers: [String:String] = [:]
     private var session: NSURLSession
-    private var body: NSData?
-
 
     init(url: String, session: NSURLSession) {
         self.url = url
@@ -61,6 +44,7 @@ public final class Target {
     }
 
     // MARK: Value collector methods
+
     public func header(name: String, value: String) -> Target {
         headers[name] = value
         return self
@@ -86,183 +70,99 @@ public final class Target {
     }
 
     // TODO:
-    // - add simple support for authorization
     // - add request body serializer support
 
-    //MARK: request methods
+    // MARK: RX request methods
 
-    // Defaults to SwiftyJSON response parser
-    public func get(callback: (Result<JSON>?) -> ()) -> Request {
-        return get(SwiftyJSONParser, callback: callback)
+    public func get() -> Observable<(JSON, [String:String])> {
+        return get(SwiftyJSONParser)
     }
 
-    // Custom response parser
-    public func get<T>(parser: (NSData?) -> (T?), callback: (Result<T>?) -> ()) -> Request {
-        return request(httpMethod(.GET), parser: parser, callback: callback)
+    public func get<T>(parser: (NSData) throws -> T) -> Observable<(T, Headers)> {
+        return parse(requestForMethod(.GET), parser: parser)
     }
 
-    // Defaults to UTF8StringParser response parser
-    public func post(body: NSData? = nil, callback: (Result<String>?) -> ()) -> Request {
-        self.body = body
-        return post(body, parser: UTF8StringParser, callback: callback)
+    public func post(data: NSData) -> Observable<(String, Headers)> {
+        return post(data, parser: UTF8StringParser)
     }
 
-    // Custom response parser
-    public func post<T>(body: NSData? = nil, parser: (NSData?) -> (T?), callback: (Result<T>?) -> ()) -> Request {
-        self.body = body
-        return request(httpMethod(.POST), parser: parser, callback: callback)
+    public func post<T>(data: NSData, parser: NSData throws -> T) -> Observable<(T, Headers)> {
+        return parse(requestForMethod(.POST, body: data), parser: parser)
     }
 
-    // Defaults to UTF8StringParser response parser
-    public func put(body: NSData? = nil, callback: (Result<String>?) -> ()) -> Request {
-        return put(body, parser: UTF8StringParser, callback: callback)
+    public func put<T>(data: NSData, parser: (NSData) throws -> T) -> Observable<(T, Headers)> {
+        return parse(requestForMethod(.PUT, body: data), parser: parser)
     }
 
-    // Custom response parser
-    public func put<T>(body: NSData? = nil, parser: (NSData?) -> (T?), callback: (Result<T>?) -> ()) -> Request {
-        self.body = body
-        return request(httpMethod(.PUT), parser: parser, callback: callback)
+    public func put(data: NSData) -> Observable<(String, Headers)> {
+        return put(data, parser: UTF8StringParser)
     }
 
-    // Defaults to UTF8StringParser response parser
-    public func delete(callback: (Result<String>?) -> ()) -> Request {
-        return delete(UTF8StringParser, callback: callback)
+    public func delete<T>(parser: (NSData) throws -> T) -> Observable<(T, Headers)> {
+        return parse(requestForMethod(.DELETE), parser: parser)
     }
 
-    // Custom response parser
-    public func delete<T>(parser: (NSData?) -> (T?), callback: (Result<T>?) -> ()) -> Request {
-        return request(httpMethod(.DELETE), parser: parser, callback: callback)
+    public func delete() -> Observable<(String, Headers)> {
+        return delete(UTF8StringParser)
     }
 
-    // MARK: Private helper methods
+    // MARK: Private
+    private func parse<T>(request: NSURLRequest, parser: (NSData) throws -> T) -> Observable<(T, Headers)> {
 
-    private func httpMethod(method: HTTPMethod) -> NSURLRequest {
-
-        let urlComponent = NSURLComponents(string: url)!
-        urlComponent.queryItems = parameters
-
-        let request = NSMutableURLRequest(URL: urlComponent.URL!)
-        request.allHTTPHeaderFields = headers
-        request.HTTPMethod = method.rawValue
-        request.HTTPBody = body
-
-        return request
-    }
-
-    private func requestForMethod(method: HTTPMethod) -> NSURLRequest {
-
-        let urlComponent = NSURLComponents(string: url)!
-        urlComponent.queryItems = parameters
-        
-        let request = NSMutableURLRequest(URL: urlComponent.URL!)
-        request.allHTTPHeaderFields = headers
-        request.HTTPMethod = method.rawValue
-        request.HTTPBody = body
-        
-        return request
-    }
-    
-    public func rx_get() -> Observable<JSON> {
-        return rx_get { data in
-            return JSON(data: data)
+        return self.request(request).map {
+            data, http in return (try parser(data), http.headers())
         }
     }
-    
-    public func rx_get<T>(parser:(NSData) throws -> T) -> Observable<T> {
-        return rx_parse(requestForMethod(.GET), parser: parser)
-    }
 
-    
-    // MARK: RX
-    
-    private func rx_parse<T>(request: NSURLRequest, parser:(NSData) throws -> T) -> Observable<T> {
-        
-        return rx_request(request).map { data, response in
-            do {
-                return try parser(data)
-            } catch let error {
-                throw FlowError.ParseError(error)
-            }
-        }
-    }
-    
-    private func rx_request(request: NSURLRequest) -> Observable<(NSData, NSHTTPURLResponse)> {
-        
-        return Observable.create { observer in
-            
-            let task = self.session.dataTaskWithRequest(request) { data, response, error in
-                
+    private func request(request: NSURLRequest) -> Observable<(NSData, NSHTTPURLResponse)> {
+
+        return Observable.create {
+            observer in
+
+            let task = self.session.dataTaskWithRequest(request) {
+                data, response, error in
+
                 // Communication Error
                 guard let response = response, data = data else {
                     observer.onError(FlowError.CommunicationError(error))
                     return
                 }
-                
+
                 // Non Http Response Error
                 guard let http = response as? NSHTTPURLResponse else {
                     observer.onError(FlowError.NonHttpResponse(response))
                     return
                 }
-                
+
                 // Unsupported Status Code Error
                 guard http.isSuccessResponse() else {
                     observer.onError(FlowError.UnsupportedStatusCode(http))
                     return
                 }
-                
+
                 observer.onNext(data, http)
                 observer.onCompleted()
             }
-            
+
             task.resume()
-            
+
             return AnonymousDisposable {
                 task.cancel()
             }
         }
     }
-    
-    private func request<T>(request: NSURLRequest, parser: (NSData?) -> (T?), callback: (Result<T>?) -> ()) -> Request {
 
-        let sessionTask = session.dataTaskWithRequest(request) {
-            data, response, error in
+    private func requestForMethod(method: HTTPMethod, body: NSData? = nil) -> NSURLRequest {
 
-            if let error = error {
-                callback(.Failure(.CommunicationError(error)))
-            } else {
-                if let httpResponse = response as? NSHTTPURLResponse where httpResponse.isSuccessResponse() {
-                    background() {
-                        let parsed = parser(data)
-                        main() {
-                            callback(.Success(Response(httpResponse: httpResponse, parsedData: parsed, rawData: data)))
-                        }
-                    }
-                } else {
-                    callback(.Failure(errorFromResponse(response)))
-                }
-            }
-        }
+        let urlComponent = NSURLComponents(string: url)!
+        urlComponent.queryItems = parameters
 
-        sessionTask.resume()
+        let request = NSMutableURLRequest(URL: urlComponent.URL!)
+        request.allHTTPHeaderFields = headers
+        request.HTTPMethod = method.rawValue
+        request.HTTPBody = body
 
-        return Request(task: sessionTask)
-    }
-}
-
-private func errorFromResponse(response: NSURLResponse?) -> FlowError {
-    
-    if let response = response {
-        if let httpResponse = response as? NSHTTPURLResponse {
-            switch (httpResponse.statusCode / 100) {
-            case 1, 3: return .UnsupportedStatusCode(httpResponse)
-            case 4: return .ClientError(httpResponse)
-            case 5: return .ServerError(httpResponse)
-            default: return .UnknownError
-            }
-        }
-        return .UnsupportedResponse(response)
-    } else {
-        return .UnknownError
+        return request
     }
 }
 
