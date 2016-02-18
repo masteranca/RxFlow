@@ -1,5 +1,5 @@
 //
-//  Flow.swift
+//  RxFlow.swift
 //  Flow
 //
 //  Created by Anders Carlsson on 02/10/15.
@@ -8,17 +8,8 @@
 
 import Foundation
 
-
-public func main(block: dispatch_block_t) {
-    dispatch_async(dispatch_get_main_queue(), block)
-}
-
-public func background(block: dispatch_block_t) {
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), block)
-}
-
-
-public final class Flow {
+// MARK: RxFlow
+public final class RxFlow {
 
     private let session: NSURLSession
 
@@ -44,16 +35,13 @@ public final class Flow {
     }
 }
 
-
+// MARK: FlowError
 public enum FlowError: ErrorType {
-
-    case UnsupportedResponse(NSURLResponse)
+    
     case CommunicationError(ErrorType?)
-    case ClientError(NSHTTPURLResponse)
-    case ServerError(NSHTTPURLResponse)
     case UnsupportedStatusCode(NSHTTPURLResponse)
-    case UnknownError
-
+    case ParseError(ErrorType?)
+    case NonHttpResponse(NSURLResponse)
 }
 
 
@@ -67,5 +55,15 @@ public extension NSHTTPURLResponse {
 
     public func headerValueForKey(key: String) -> String? {
         return self.allHeaderFields[key] as? String
+    }
+    
+    public func headers() -> [String:String] {
+        var headers:[String:String] = [:]
+        
+        for (key, value) in self.allHeaderFields {
+            headers[key as! String as String!] = value as? String
+        }
+               
+        return headers
     }
 }
