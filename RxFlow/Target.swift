@@ -35,15 +35,15 @@ public final class Target {
 	private let url: String
 	private var session: NSURLSession
 	private let retries: Int
-    private let retryDelay: Double
+    private let delay: Double
 	private lazy var parameters: Array<NSURLQueryItem> = []
 	private lazy var headers: [String: String] = [:]
 
-    init(url: String, session: NSURLSession, retries: Int, retryDelay: Double) {
+    init(url: String, session: NSURLSession, retries: Int, delay: Double) {
 		self.url = url
 		self.session = session
 		self.retries = retries
-        self.retryDelay = retryDelay
+        self.delay = delay
 	}
 
 	// MARK: Value collector methods
@@ -167,7 +167,7 @@ public final class Target {
 
 			switch error {
 			case FlowError.CommunicationError(_), FlowError.UnsupportedStatusCode(_):
-				NSThread.sleepForTimeInterval(self.retryDelay)
+				NSThread.sleepForTimeInterval(self.delay)
 				attemptsLeft--
 				return Observable.just(0)
 			default: return Observable.error(error)
