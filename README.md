@@ -18,14 +18,14 @@ RxFlow().target("some_url").get { data in
 ```
 ### GET request with error handling
 ```swift
-RxFlow().target(getURL)
-        .get().subscribe { event in
-            switch event {
-            case .Next(let result): // handle result
-            case .Error(let error): // handle error
-            case .Completed: // handle completion
-            }
-        }
+		RxFlow().target(getURL)
+                .get().subscribe { event in
+                    switch event {
+                    case .Next(let result): // handle result
+                    case .Error(let error): // handle error
+                    case .Completed: // handle completion
+                    }
+                }
 ```
 ### GET request with custom headers and query parameters
 ```swift
