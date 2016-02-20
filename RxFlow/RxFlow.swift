@@ -26,8 +26,8 @@ public final class RxFlow {
         self.session = session
     }
 
-    public func target(url: String) -> Target {
-        return Target(url: url, session: session)
+    public func target(url: String, retries: Int = 0, retryDelay:Double = 0) -> Target {
+        return Target(url: url, session: session, retries: retries, retryDelay: retryDelay)
     }
 
     func invalidateSession() {
@@ -42,6 +42,7 @@ public enum FlowError: ErrorType {
     case UnsupportedStatusCode(NSHTTPURLResponse)
     case ParseError(ErrorType?)
     case NonHttpResponse(NSURLResponse)
+    case RetryFailed(ErrorType?, Int, Int)
 }
 
 

@@ -155,7 +155,7 @@ class RxFlowTests: XCTestCase {
 		RxFlow().target("invalid_address").get().subscribeError { error in
 			do { throw error }
 			catch FlowError.CommunicationError(_) { expectation.fulfill() }
-			catch {}
+			catch { }
 		}.addDisposableTo(disposeBag)
 
 		waitForExpectation()
@@ -163,15 +163,15 @@ class RxFlowTests: XCTestCase {
 
 	func testUnsupportedStatusCode() {
 
-        let expectation = self.expectationWithDescription("Status code 400 should result in UnsupportedStatusCode")
-        
-        RxFlow().target("https://httpbin.org/status/400").get().subscribeError { error in
-            do { throw error }
-            catch FlowError.UnsupportedStatusCode(_) { expectation.fulfill() }
-            catch {}
-            }.addDisposableTo(disposeBag)
-        
-        waitForExpectation()
+		let expectation = self.expectationWithDescription("Status code 400 should result in UnsupportedStatusCode")
+
+		RxFlow().target("https://httpbin.org/status/400").get().subscribeError { error in
+			do { throw error }
+			catch FlowError.UnsupportedStatusCode(_) { expectation.fulfill() }
+			catch { }
+		}.addDisposableTo(disposeBag)
+
+		waitForExpectation()
 	}
 
 	func testParseError() {
@@ -182,10 +182,28 @@ class RxFlowTests: XCTestCase {
 			throw FlowError.ParseError(nil)
 		}.subscribeError { error in
 			do { throw error }
-            catch FlowError.ParseError(_) {	expectation.fulfill() }
-            catch {}
+			catch FlowError.ParseError(_) { expectation.fulfill() }
+			catch { }
 		}.addDisposableTo(disposeBag)
 
+		waitForExpectation()
+	}
+
+	func testRetry() {
+        
+		let expectation = expectationWithDescription("Retry should complete")
+        let retries = 3
+    
+        RxFlow().target("https://httpbin.org/status/400", retries: retries).get().subscribeError { error in
+            switch error {
+            case FlowError.RetryFailed(_, let attemptsDone, let attemptsLeft):
+                if attemptsDone == retries && attemptsLeft == 0 {
+                    expectation.fulfill()
+                }
+            default: return
+            }
+		}.addDisposableTo(disposeBag)
+        
 		waitForExpectation()
 	}
 
