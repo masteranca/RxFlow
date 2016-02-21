@@ -174,6 +174,21 @@ class RxFlowTests: XCTestCase {
 		waitForExpectation()
 	}
 
+	func testParsingIsNotPerformedOnMainThread() {
+
+		let expectation = self.expectationWithDescription("Parsing should not be performed on main thread")
+        var isMain = true
+        
+		RxFlow().target(getURL).get { (data) -> Void in
+            isMain = NSThread.isMainThread()
+		}.subscribeNext { _, _ in
+            expectation.fulfill()
+        }.addDisposableTo(disposeBag)
+
+		waitForExpectation()
+        XCTAssertFalse(isMain)
+	}
+
 	func testParseError() {
 
 		let expectation = expectationWithDescription("")
@@ -190,20 +205,20 @@ class RxFlowTests: XCTestCase {
 	}
 
 	func testRetry() {
-        
+
 		let expectation = expectationWithDescription("Retry should complete")
-        let retries = 3
-    
-        RxFlow().target("https://httpbin.org/status/400", retries: retries).get().subscribeError { error in
-            switch error {
-            case FlowError.RetryFailed(_, let attemptsDone, let attemptsLeft):
-                if attemptsDone == retries && attemptsLeft == 0 {
-                    expectation.fulfill()
-                }
-            default: return
-            }
+		let retries = 3
+
+		RxFlow().target("https://httpbin.org/status/400", retries: retries).get().subscribeError { error in
+			switch error {
+			case FlowError.RetryFailed(_, let attemptsDone, let attemptsLeft):
+				if attemptsDone == retries && attemptsLeft == 0 {
+					expectation.fulfill()
+				}
+			default: return
+			}
 		}.addDisposableTo(disposeBag)
-        
+
 		waitForExpectation()
 	}
 

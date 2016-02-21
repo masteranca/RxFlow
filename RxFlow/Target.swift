@@ -30,8 +30,10 @@ private enum HTTPMethod: String {
 
 public final class Target {
 
+    private static let background = ConcurrentDispatchQueueScheduler.init(globalConcurrentQueueQOS: .Background)
+    
 	public typealias Headers = [String: String]
-
+    
 	private let url: String
 	private var session: NSURLSession
 	private let retries: Int
@@ -109,14 +111,13 @@ public final class Target {
 		return delete(UTF8StringParser)
 	}
 
-	// MARK: Private
-	private func parse<T>(request: NSURLRequest, parser: (NSData) throws -> T) -> Observable < (T, Headers) > {
-
-		return self.request(request).map {
-			data, http in return (try parser(data), http.headers())
-		}
-	}
-
+    // MARK: Private
+    private func parse<T>(request: NSURLRequest, parser: (NSData) throws -> T) -> Observable < (T, Headers) > {
+        return self.request(request).observeOn(Target.background).map { data, http in
+            return (try parser(data), http.headers())
+        }
+    }
+    
 	private func request(request: NSURLRequest) -> Observable < (NSData, NSHTTPURLResponse) > {
 
 		let observable = Observable < (NSData, NSHTTPURLResponse) > .create { observer in
