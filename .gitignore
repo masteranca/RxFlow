@@ -32,5 +32,8 @@ xcuserdata
 # Cocoapods
 Pods/
 
+# Carthage
+Carthage/
+
 # AppCode
 .idea/
